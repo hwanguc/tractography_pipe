@@ -98,7 +98,6 @@ for Subj in "${Subjs[@]}"; do
 
     ### Remove the Gibb's ringing artifacts from the data (optional):
     
-    
     mrdegibbs $(echo $Subj)_den.mif $(echo $Subj)_den_unr.mif
 
 

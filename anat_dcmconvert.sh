@@ -28,20 +28,20 @@ Dir_PreProc="$Dir_Common/pre_processing"
 
 for Subj in "${Subjs[@]}"; do
 
-    echo "Converting dicom to nifti and mif for $Subj"
+    echo "Converting T1 dicom to nifti and mif for $Subj"
 
     T1_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*t1*" -exec basename {} \; | head -n 1)
 
-    Dir_Subj_Tmp_Raw="$Dir_Raw/$Subj/$T1_Dir_Name_Tmp"
-    Dir_Subj_Tmp_Anat="$Dir_PreProc/$Subj/anat"
+    Dir_Subj_Tmp_T1_Raw="$Dir_Raw/$Subj/$T1_Dir_Name_Tmp"
+    Dir_Subj_Tmp_T1_Proc="$Dir_PreProc/$Subj/anat"
 
-    if [ ! -d "" ]; then
-        mkdir -p "$Dir_Subj_Tmp_Anat"
-        echo "Folder created: $Dir_Subj_Tmp_Anat"
+    if [ ! -d "$Dir_Subj_Tmp_T1_Proc" ]; then
+        mkdir -p "$Dir_Subj_Tmp_T1_Proc"
+        echo "Folder created: $Dir_Subj_Tmp_T1_Proc"
     fi
 
-    mrconvert $Dir_Subj_Tmp_Raw "$Dir_Subj_Tmp_Anat/$(echo $Subj)_T1w.nii"
-    mrconvert $Dir_Subj_Tmp_Raw "$Dir_Subj_Tmp_Anat/$(echo $Subj)_T1w.mif"
+    mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
+    mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
 
-    echo -e "\n\n\n"
+    echo -e "\n\n"
 done

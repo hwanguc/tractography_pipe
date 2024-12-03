@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 
-### This script performs batch processing of the DWI files and allow for the following options:
+## Author: Han Wang
+### 2 Dec 2024: Initial version
 
-#### Gibb's ring removal: 0 (off) or 1 (on)
-#### Inhomogeneities (bias) correction: 0 (off) or 1 (on)
-#### FOD normalisation (for fixel-based analysis): 0 (off) or 1 (on)
-#### Package for image co-registration (dwi and anat): fsl (uing flirt) or nifreg (using niftyreg-KCL version)
+### This script performs batch processing of the DWI files and allows for the following options:
+
+#### Gibb's ring removal: 0 (off) or 1 (on), default 0.
+#### Inhomogeneities (bias) correction: 0 (off) or 1 (on), default 0.
+#### Brain mask estimation: mrtrix (use the dwi2mask function from mrtrix) or bet2 (use the bet2 function from fsl, which might be preferred), default "mrtrix"
+#### FOD normalisation (for fixel-based analysis): 0 (off) or 1 (on), default 0.
+#### Package for image co-registration (dwi and anat): fsl (uing flirt) or nifreg (using niftyreg-KCL version), default "flirt".
 
 ### The output mif files ("sub-xxx_5tt_coreg.mif", etc) are ready for subsequent tractography based on user-defined ROI files.
+
+### Note that this script depends on the packages MRTrix3, FSL, and ANTs (ANTs needed for bias correction).
 
 
 # Common variables (these might move to a higher-level general script which calls specific functions at a later stage):
@@ -16,6 +22,8 @@
 
 GibbsRm="0"
 BiasCorr="0"
+BrainMask="mrtrix"
+MaskIntThre=0.7 # Set the fractional intensity threshold for the brain mask, only for the use of bet2
 FodNorm="0"
 ImgCoreg="flirt"
 
@@ -27,8 +35,8 @@ Proj="kdv" # unused for now
 
 ## Participants:
 
-Subjs=("115" "116" "117")
-mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with subj-SUBJ_ID
+Subjs=("115" "116" "117") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
 
@@ -90,39 +98,80 @@ for Subj in "${Subjs[@]}"; do
     ## Preprocessing - Data pipelines:
 
     ### Denoise the data using dwi_noise (note that here we also save the "noise" to a mif):
+    echo "Denoising the DWI data for $Subj"
     dwidenoise "$(echo $Subj)_dwi.mif" "$(echo $Subj)_den.mif" -noise "$(echo $Subj)_noise.mif"
+    echo -e "\n"
 
     #### calculate and save the residuals:
+    echo "Calculating and saving the residual (noise) for DWI of $Subj"
     mrcalc "$(echo $Subj)_dwi.mif" "$(echo $Subj)_den.mif" -subtract "$(echo $Subj)_residual.mif"
+    echo -e "\n"
+
 
 
     ### Remove the Gibb's ringing artifacts from the data (optional):
+    if [ $GibbsRm == "1" ]; then
+        echo "Removing Gibbs Ring effect for $Subj"
+        mrdegibbs $(echo $Subj)_den.mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif
+        echo -e "\n"
+    else
+        cp ./$(echo $Subj)_den.mif ./$(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif
+    fi
+
+    ### Run preprocessing (note that the eddy options here are for single-shell data as in our case, might allow opt for multi shell in a later version):
+    dwifslpreproc $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol"
+
+    ### Generate a whole-brain mask
+    #### remove inhomogeneities detected in the data that can lead to a better mask estimation (optional):
     
-    mrdegibbs $(echo $Subj)_den.mif $(echo $Subj)_den_unr.mif
+    if [ $BiasCorr == "1" ]; then
+        echo "Removing inhomogeneties from DWI data for $Subj"
+        dwibiascorrect ants $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif -bias $(echo $Subj)_bias.mif
+        echo -e "\n"
+    else
+        cp ./$(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif ./$(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif
+    fi
 
 
-## Run preprocessing (note that the eddy options here are for single-shell data as in our case):
-dwifslpreproc $(echo $Subj)_den.mif $(echo $Subj)_den_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol"
+    #### now generate a mask (options are "mrtrix" or "bet": default is mrtrix):
+    
+    echo "Generating a brain mask using $BrainMask for $Subj"
+
+    if [ $BrainMask == "bet2" ]
+        mrconvert $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).nii
+        bet2 $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).nii $(echo $Subj)_brainmask_$BrainMask.nii.gz -m -f $MaskIntThre
+        mrconvert $(echo $Subj)_brainmask_$BrainMask.nii.gz $(echo $Subj)_brainmask_$BrainMask.mif
+    else
+        dwi2mask $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_brainmask_$BrainMask.mif
+    fi
+
+    echo -e "\n"
 
 
-## Generate a whole-brain mask
-### remove inhomogeneities detected in the data that can lead to a better mask estimation (optional):
-dwibiascorrect ants $(echo $Subj)_den_preproc.mif $(echo $Subj)_den_preproc_unbiased.mif -bias $(echo $Subj)_bias.mif
-### now generate a mask (might alternatively try with FSL's bet2 func?):
-dwi2mask $(echo $Subj)_den_preproc_unbiased.mif $(echo $Subj)_mask.mif
+
+    ### Constrained Spherical Deconvolution
+
+    #### a basis function from the diffusion data (note this is for single-shell data, might add more options for multi-shell data)
+    echo "Estimating a basis function from the diffusion data for $Subj"
+    dwi2response tournier $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt
+    echo -e "\n"
 
 
-## Constrained Spherical Deconvolution
-### a basis function from the diffusion data (note this is for single-shell data)
+    #### use the basis functions to estimate fibre orientation density (FOD, note that csd is only for single-shell, might need to add more options for multi-shell data later)
+    echo "Estimating the fibre orientation density (FOD) for $Subj"
+    dwi2fod csd $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt $(echo $Subj)_fod.mif -mask  $(echo $Subj)_brainmask_$BrainMask.mif
+    echo -e "\n"
 
-dwi2response tournier $(echo $Subj)_den_preproc_unbiased.mif $(echo $Subj)_csd.txt
 
-### use the basis functions to estimate fibre orientation density (FOD)
-dwi2fod csd $(echo $Subj)_den_preproc_unbiased.mif $(echo $Subj)_csd.txt $(echo $Subj)_fod.mif -mask  $(echo $Subj)_mask.mif
+    #### now we normalise the FODs (optional - for fixel based analysis)
 
-### now we normalise the FODs (optional - for fixel based analysis)
-mtnormalise $(echo $Subj)_fod.mif $(echo $Subj)_fod_norm.mif -mask $(echo $Subj)_mask.mif
-
+    if [ FodNorm == "1" ]
+        echo "Normalising the FODs for $Subj"
+        mtnormalise $(echo $Subj)_fod.mif $(echo $Subj)_fod_norm$(echo $FodNorm).mif -mask $(echo $Subj)_brainmask_$BrainMask.mif
+        echo -e "\n"
+    else
+        cp ./$(echo $Subj)_fod.mif ./$(echo $Subj)_fod_norm$(echo $FodNorm).mif
+    fi
 
 
 
@@ -172,21 +221,4 @@ mrview $(echo $Subj)_den_preproc_unbiased.mif -overlay.load $(echo $Subj)_5tt_no
 
 done
 
-
-
-
-## Diffusion image:
-
-### Convert dicom dwis to nifti ones:
-
-#### AP direction
-mrconvert /home/hanwang/Apps/working_directory/bash_python_proj/kdvproj/data/raw/sub-113/003_-_PRE_DWI_A-P_DIST_CORR_64_MDDW /home/hanwang/Apps/working_directory/bash_python_proj/kdvproj/data/pre_processing/sub-113/dwi/sub-113_b0.nii.gz -stride 1,2,3
-#### PA direction
-mrconvert /home/hanwang/Apps/working_directory/bash_python_proj/kdvproj/data/raw/sub-113/004_-_PRE_DWI_P-A_DIST_Change_180 /home/hanwang/Apps/working_directory/bash_python_proj/kdvproj/data/pre_processing/sub-113/dwi/sub-113_b0_flip.nii.gz -stride 1,2,3
-#### dwi data
-mrconvert /home/hanwang/Apps/working_directory/bash_python_proj/kdvproj/data/raw/sub-113/005_-_FREE_DWI_71_directions_ep2d_diff_mbc_p2 /home/hanwang/Apps/working_directory/bash_python_proj/kdvproj/data/pre_processing/sub-113/dwi/sub-113_dwi.mif
-
-#### merge AP and PA b0s (in the pre-processing/subj folder)
-fslmerge -t sub-113_b0_pair.nii.gz sub-113_b0.nii.gz sub-113_b0_flip.nii.gz
-mrconvert sub-113_b0_pair.nii.gz sub-113_b0_pair.mif
 

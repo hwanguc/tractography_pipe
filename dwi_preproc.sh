@@ -35,7 +35,7 @@ Proj="kdv" # unused for now
 
 ## Participants:
 
-Subjs=("115" "116" "117") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("113") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -47,9 +47,11 @@ Dir_PreProc="$Dir_Common/pre_processing"
 # Preprocessing:
 
 for Subj in "${Subjs[@]}"; do
+    echo -e "\n"
+    echo "Pre-processing started for $Subj"
+    echo -e "\n"
 
-
-    ## File Conversion and Curation:
+    ## 1. File Conversion and Curation:
 
     ### Define the folders we're working on/in
 
@@ -88,16 +90,18 @@ for Subj in "${Subjs[@]}"; do
     mrconvert $Dir_Subj_Tmp_DWI_DAT_Raw "$(echo $Subj)_dwi.mif" # convert the DWI data file to mif
 
     echo "Conversion from DWI dicom to nifti and mif FINISHED for $Subj"
-    echo -e "\n\n"
+    echo -e "\n"
 
+    echo "Merging AP and PA b0s into b0_pair.mif for $Subj"
     ### merge AP and PA b0s for the current subj
     fslmerge -t "$(echo $Subj)_b0_pair.nii.gz" "$(echo $Subj)_b0.nii.gz" "$(echo $Subj)_b0_flip.nii.gz"
     mrconvert "$(echo $Subj)_b0_pair.nii.gz" "$(echo $Subj)_b0_pair.mif"
+    echo -e "\n\n"
 
-
-    ## Preprocessing - Data pipelines:
+    ## 2. Data pipelines:
 
     ### Denoise the data using dwi_noise (note that here we also save the "noise" to a mif):
+    echo -e "\n"
     echo "Denoising the DWI data for $Subj"
     dwidenoise "$(echo $Subj)_dwi.mif" "$(echo $Subj)_den.mif" -noise "$(echo $Subj)_noise.mif"
     echo -e "\n"
@@ -106,8 +110,6 @@ for Subj in "${Subjs[@]}"; do
     echo "Calculating and saving the residual (noise) for DWI of $Subj"
     mrcalc "$(echo $Subj)_dwi.mif" "$(echo $Subj)_den.mif" -subtract "$(echo $Subj)_residual.mif"
     echo -e "\n"
-
-
 
     ### Remove the Gibb's ringing artifacts from the data (optional):
     if [ $GibbsRm == "1" ]; then
@@ -119,7 +121,9 @@ for Subj in "${Subjs[@]}"; do
     fi
 
     ### Run preprocessing (note that the eddy options here are for single-shell data as in our case, might allow opt for multi shell in a later version):
+    echo "Runnning the DWIFSL preprocessing pipeline for $Subj"
     dwifslpreproc $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol"
+    echo -e "\n"
 
     ### Generate a whole-brain mask
     #### remove inhomogeneities detected in the data that can lead to a better mask estimation (optional):
@@ -137,7 +141,7 @@ for Subj in "${Subjs[@]}"; do
     
     echo "Generating a brain mask using $BrainMask for $Subj"
 
-    if [ $BrainMask == "bet2" ]
+    if [ $BrainMask == "bet2" ]; then
         mrconvert $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).nii
         bet2 $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).nii $(echo $Subj)_brainmask_$BrainMask.nii.gz -m -f $MaskIntThre
         mrconvert $(echo $Subj)_brainmask_$BrainMask.nii.gz $(echo $Subj)_brainmask_$BrainMask.mif
@@ -148,7 +152,6 @@ for Subj in "${Subjs[@]}"; do
     echo -e "\n"
 
 
-
     ### Constrained Spherical Deconvolution
 
     #### a basis function from the diffusion data (note this is for single-shell data, might add more options for multi-shell data)
@@ -156,69 +159,67 @@ for Subj in "${Subjs[@]}"; do
     dwi2response tournier $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt
     echo -e "\n"
 
-
     #### use the basis functions to estimate fibre orientation density (FOD, note that csd is only for single-shell, might need to add more options for multi-shell data later)
     echo "Estimating the fibre orientation density (FOD) for $Subj"
     dwi2fod csd $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt $(echo $Subj)_fod.mif -mask  $(echo $Subj)_brainmask_$BrainMask.mif
     echo -e "\n"
 
-
     #### now we normalise the FODs (optional - for fixel based analysis)
 
-    if [ FodNorm == "1" ]
+    if [ FodNorm == "1" ]; then
         echo "Normalising the FODs for $Subj"
         mtnormalise $(echo $Subj)_fod.mif $(echo $Subj)_fod_norm$(echo $FodNorm).mif -mask $(echo $Subj)_brainmask_$BrainMask.mif
-        echo -e "\n"
+        echo -e "\n\n"
     else
         cp ./$(echo $Subj)_fod.mif ./$(echo $Subj)_fod_norm$(echo $FodNorm).mif
+        echo -e "\n"
     fi
 
 
+    ## 3. Creating tissue boundaries (copy the anat/mif file to dwi folder):
+    ### Will give an option below to use the "niftyreg" package (use the KCL one)
+
+    ### copy the T1 mif file to the dwi folder
+    cp $Dir_PreProc/$Subj/anat/$(echo $Subj)_T1w.mif ./$(echo $Subj)_T1w.mif
+
+    ### segment the anatomical image into the five tissue types:
+    echo "Creating tissue boundaries for the five tissues for $Subj"
+    5ttgen fsl $(echo $Subj)_T1w.mif $(echo $Subj)_5tt_nocoreg.mif
+    echo -e "\n\n"
 
 
-# Niftyreg package, use the KCL one 
-# Preprocessing - Creating tissue boundaries (copy the anat/mif file to dwi folder):
+    ## 4. Coregister the diffusion and anatomical images:
 
-## segment the anatomical image into the five tissue types:
-5ttgen fsl $(echo $Subj)_T1w.mif $(echo $Subj)_5tt_nocoreg.mif
+    echo "Coregistering the diffusion and anatomical images for $Subj"
+    ### average together the b0 images:
+    dwiextract $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif - -bzero | mrmath - mean $(echo $Subj)_mean_b0.mif -axis 3
 
-## Coregister the diffusion and anatomical images:
-### average together the b0 images:
-dwiextract $(echo $Subj)_den_preproc_unbiased.mif - -bzero | mrmath - mean $(echo $Subj)_mean_b0.mif -axis 3
+    ### convert both the segmented anatomical image and the mean b0 image we just generated:
+    mrconvert $(echo $Subj)_mean_b0.mif $(echo $Subj)_mean_b0.nii.gz
+    mrconvert $(echo $Subj)_5tt_nocoreg.mif $(echo $Subj)_5tt_nocoreg.nii.gz
 
-### convert both the segmented anatomical image and the mean b0 image we just generated:
-mrconvert $(echo $Subj)_mean_b0.mif $(echo $Subj)_mean_b0.nii.gz
-mrconvert $(echo $Subj)_5tt_nocoreg.mif $(echo $Subj)_5tt_nocoreg.nii.gz
+    ### extract the first vol of the 5-tissue segmented dataset, which corresponds to the grey matter segmentation
+    fslroi $(echo $Subj)_5tt_nocoreg.nii.gz $(echo $Subj)_5tt_vol0.nii.gz 0 1
 
-### extract the first vol of the 5-tissue segmented dataset, which corresponds to the grey matter segmentation
+    ### Now, coregister the two datasets (mean_b0 and grey matter anatomy, anatomy as a ref, the output file is a transformation matrix):
+    flirt -in $(echo $Subj)_mean_b0.nii.gz -ref $(echo $Subj)_5tt_vol0.nii.gz -interp nearestneighbour -dof 6 -omat $(echo $Subj)_diff2struct_fsl.mat
 
-fslroi $(echo $Subj)_5tt_nocoreg.nii.gz $(echo $Subj)_5tt_vol0.nii.gz 0 1
+    ### transform the matrix into a form that is readable by MRtrix
+    transformconvert $(echo $Subj)_diff2struct_fsl.mat $(echo $Subj)_mean_b0.nii.gz $(echo $Subj)_5tt_nocoreg.nii.gz flirt_import $(echo $Subj)_diff2struct_mrtrix.txt
 
-### Now, coregister the two datasets (mean_b0 and grey matter anatomy, anatomy as a ref, the output file is a transformation matrix):
+    ### Now, we do the inverse - register the diffusion image to the anatomical image:
+    mrtransform $(echo $Subj)_5tt_nocoreg.mif -linear $(echo $Subj)_diff2struct_mrtrix.txt -inverse $(echo $Subj)_5tt_coreg.mif
 
-flirt -in $(echo $Subj)_mean_b0.nii.gz -ref $(echo $Subj)_5tt_vol0.nii.gz -interp nearestneighbour -dof 6 -omat $(echo $Subj)_diff2struct_fsl.mat
+    #### we can view the coreg:
+    #mrview $(echo $Subj)_den_preproc_unbiased.mif -overlay.load $(echo $Subj)_5tt_nocoreg.mif -overlay.colourmap 2 -overlay.load $(echo $Subj)_5tt_coreg.mif -overlay.colourmap 1
+    echo -e "\n"
 
-### transform the matrix into a form that is readable by MRtrix
+    echo "Creating the seed boundaries for streamline estimation for $Subj"
+    ### Now, create the seed boundaries (for streamline processing later):
+    5tt2gmwmi $(echo $Subj)_5tt_coreg.mif $(echo $Subj)_gmwmSeed_coreg.mif
+    echo -e "\n"
 
-transformconvert $(echo $Subj)_diff2struct_fsl.mat $(echo $Subj)_mean_b0.nii.gz $(echo $Subj)_5tt_nocoreg.nii.gz flirt_import $(echo $Subj)_diff2struct_mrtrix.txt
-
-### Now, we do the inverse - register the diffusion image to the anatomical image:
-
-mrtransform $(echo $Subj)_5tt_nocoreg.mif -linear $(echo $Subj)_diff2struct_mrtrix.txt -inverse $(echo $Subj)_5tt_coreg.mif
-
-#### we can view the coreg:
-mrview $(echo $Subj)_den_preproc_unbiased.mif -overlay.load $(echo $Subj)_5tt_nocoreg.mif -overlay.colourmap 2 -overlay.load $(echo $Subj)_5tt_coreg.mif -overlay.colourmap 1
-
-### Now, create the seed boundaries (for streamline processing later):
-5tt2gmwmi $(echo $Subj)_5tt_coreg.mif $(echo $Subj)_gmwmSeed_coreg.mif
-
-
-
-
-
-
-
+    echo "Pre-processing completed for $Subj"
+    echo -e "\n\n"
 
 done
-
-

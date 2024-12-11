@@ -14,7 +14,7 @@ Proj="kdvproj" # unused for now
 
 ## Participants:
 
-Subjs=("115" "116" "117")
+Subjs=("115")
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with subj-SUBJ_ID
 
 ## Directories:

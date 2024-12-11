@@ -2,6 +2,7 @@
 
 ## Author: Han Wang
 ### 2 Dec 2024: Initial version
+### 11 Dec 2024: Added an option to support co-registration by Niftyreg (KCL)
 
 ### This script performs batch processing of the DWI files and allows for the following options:
 
@@ -9,11 +10,11 @@
 #### Inhomogeneities (bias) correction: 0 (off) or 1 (on), default 0.
 #### Brain mask estimation: mrtrix (use the dwi2mask function from mrtrix) or bet2 (use the bet2 function from fsl, which might be preferred), default "mrtrix"
 #### FOD normalisation (for fixel-based analysis): 0 (off) or 1 (on), default 0.
-#### Package for image co-registration (dwi and anat): fsl (uing flirt) or nifreg (using niftyreg-KCL version), default "flirt".
+#### Package for image co-registration (dwi and anat): flirt (uing flirt in fsl) or niftyreg (using niftyreg-KCL version), default "flirt".
 
 ### The output mif files ("sub-xxx_5tt_coreg.mif", etc) are ready for subsequent tractography based on user-defined ROI files.
 
-### Note that this script depends on the packages MRTrix3, FSL, and ANTs (ANTs needed for bias correction).
+### Note that this script depends on the packages MRTrix3, FSL, Niftyreg, and ANTs (ANTs needed for bias correction).
 
 
 # Common variables (these might move to a higher-level general script which calls specific functions at a later stage):
@@ -25,7 +26,7 @@ BiasCorr="0"
 BrainMask="mrtrix"
 MaskIntThre=0.7 # Set the fractional intensity threshold for the brain mask, only for the use of bet2
 FodNorm="0"
-ImgCoreg="flirt"
+ImgCoreg="niftyreg"
 
 
 ## Project ID:
@@ -35,7 +36,7 @@ Proj="kdv" # unused for now
 
 ## Participants:
 
-Subjs=("113") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("115") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -201,22 +202,41 @@ for Subj in "${Subjs[@]}"; do
     ### extract the first vol of the 5-tissue segmented dataset, which corresponds to the grey matter segmentation
     fslroi $(echo $Subj)_5tt_nocoreg.nii.gz $(echo $Subj)_5tt_vol0.nii.gz 0 1
 
-    ### Now, coregister the two datasets (mean_b0 and grey matter anatomy, anatomy as a ref, the output file is a transformation matrix):
-    flirt -in $(echo $Subj)_mean_b0.nii.gz -ref $(echo $Subj)_5tt_vol0.nii.gz -interp nearestneighbour -dof 6 -omat $(echo $Subj)_diff2struct_fsl.mat
+    echo -e "\n"
 
-    ### transform the matrix into a form that is readable by MRtrix
-    transformconvert $(echo $Subj)_diff2struct_fsl.mat $(echo $Subj)_mean_b0.nii.gz $(echo $Subj)_5tt_nocoreg.nii.gz flirt_import $(echo $Subj)_diff2struct_mrtrix.txt
+    echo "Registering 5-tissue boundaries onto DWI image (using the inverse DWI to 5tt transformation matrix) for $Subj using $ImgCoreg"
 
-    ### Now, we do the inverse - register the diffusion image to the anatomical image:
-    mrtransform $(echo $Subj)_5tt_nocoreg.mif -linear $(echo $Subj)_diff2struct_mrtrix.txt -inverse $(echo $Subj)_5tt_coreg.mif
+    if [ ImgCoreg == "flirt" ]; then
+        ### Now, coregister the two datasets (mean_b0 and grey matter anatomy, anatomy as a ref, the output file is a transformation matrix):
+        flirt -in $(echo $Subj)_mean_b0.nii.gz -ref $(echo $Subj)_5tt_vol0.nii.gz -interp nearestneighbour -dof 6 -omat $(echo $Subj)_diff2struct_$(echo $ImgCoreg).mat
+
+        ### transform the matrix into a form that is readable by MRtrix
+        transformconvert $(echo $Subj)_diff2struct_$(echo $ImgCoreg).mat $(echo $Subj)_mean_b0.nii.gz $(echo $Subj)_5tt_nocoreg.nii.gz flirt_import $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_mrtrix.txt
+
+        ### Now, we do the inverse - register the diffusion image to the anatomical image:
+        mrtransform $(echo $Subj)_5tt_nocoreg.mif -linear $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_mrtrix.txt -inverse $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif
+
+    else
+        ### Generate the transformation matrix with Niftyreg, ref image T1, floating image mean b0
+        reg_aladin -ref $(echo $Subj)_5tt_vol0.nii.gz -flo $(echo $Subj)_mean_b0.nii.gz -interp 0 -aff $(echo $Subj)_diff2struct_$(echo $ImgCoreg).txt
+
+        ### Calculate the inverse matrix from the transformation matrix for using T1 as floating image
+        reg_transform -invAff $(echo $Subj)_diff2struct_$(echo $ImgCoreg).txt $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt
+
+        ### Register T1 onto the DWI image using the inverse matrix calculated above
+        reg_resample -ref $(echo $Subj)_5tt_nocoreg.nii.gz -flo $(echo $Subj)_5tt_nocoreg.nii.gz -trans $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt -inter 0 -res $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).nii.gz
+
+        mrconvert $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).nii.gz $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif
+    fi
 
     #### we can view the coreg:
     #mrview $(echo $Subj)_den_preproc_unbiased.mif -overlay.load $(echo $Subj)_5tt_nocoreg.mif -overlay.colourmap 2 -overlay.load $(echo $Subj)_5tt_coreg.mif -overlay.colourmap 1
     echo -e "\n"
 
     echo "Creating the seed boundaries for streamline estimation for $Subj"
-    ### Now, create the seed boundaries (for streamline processing later):
-    5tt2gmwmi $(echo $Subj)_5tt_coreg.mif $(echo $Subj)_gmwmSeed_coreg.mif
+
+    ### Now create the seed boundaries for streamline processing later
+    5tt2gmwmi $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif $(echo $Subj)_gmwmSeed_coreg.mif
     echo -e "\n"
 
     echo "Pre-processing completed for $Subj"

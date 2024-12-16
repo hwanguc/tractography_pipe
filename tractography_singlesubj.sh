@@ -137,7 +137,7 @@ mrview sub-113_den_preproc_unbiased.mif -tractography.load sub-113_smallerTracks
 dwi2tensor sub-113_den_preproc_unbiased.mif -mask sub-113_mask.mif sub-113_dt.mif
 
 ## Generate tensor-derived measures (ADC, FA, AD, RD, eigenvector):
-tensor2metric sub-113_dt.mif -fa sub-113_fa.mif -adc sub-113_md.mif -vector sub-113_ev.mif -ad sub-113_ad.mif -rd sub-113_rd
+tensor2metric sub-113_dt.mif -fa sub-113_fa.mif -adc sub-113_md.mif -vector sub-113_ev.mif -ad sub-113_ad.mif -rd sub-113_rd.mif
 
 ## Edit tracks based on ROIs (assuming ROIs manually generated in the subject's folder):
 

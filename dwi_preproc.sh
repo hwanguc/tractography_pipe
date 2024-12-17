@@ -223,8 +223,11 @@ for Subj in "${Subjs[@]}"; do
         ### Calculate the inverse matrix from the transformation matrix for using T1 as floating image
         reg_transform -invAff $(echo $Subj)_diff2struct_$(echo $ImgCoreg).txt $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt
 
+        ### regrid the mean b0 image to T1 resolution (1*1*1) so we can use b0 as a ref image for resampling
+        mrgrid $(echo $Subj)_mean_b0.nii.gz regrid -voxel 1 $(echo $Subj)_mean_b0_1mm-iso.nii.gz
+
         ### Register T1 onto the DWI image using the inverse matrix calculated above
-        reg_resample -ref $(echo $Subj)_5tt_nocoreg.nii.gz -flo $(echo $Subj)_5tt_nocoreg.nii.gz -trans $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt -inter 0 -res $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).nii.gz
+        reg_resample -ref $(echo $Subj)_mean_b0_1mm-iso.nii.gz -flo $(echo $Subj)_5tt_nocoreg.nii.gz -trans $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt -inter 0 -res $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).nii.gz
 
         mrconvert $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).nii.gz $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif
     fi

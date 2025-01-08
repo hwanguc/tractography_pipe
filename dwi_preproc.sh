@@ -9,8 +9,11 @@
 #### Gibb's ring removal: 0 (off) or 1 (on), default 0.
 #### Inhomogeneities (bias) correction: 0 (off) or 1 (on), default 0.
 #### Brain mask estimation: mrtrix (use the dwi2mask function from mrtrix) or bet2 (use the bet2 function from fsl, which might be preferred), default "mrtrix"
+#### Mask Intensity Threshold (only for bet2): default 0.7.
 #### FOD normalisation (for fixel-based analysis): 0 (off) or 1 (on), default 0.
 #### Package for image co-registration (dwi and anat): flirt (uing flirt in fsl) or niftyreg (using niftyreg-KCL version), default "flirt".
+
+#### Project ID: "kdvproj" or "grin2aproj". The directory structure for KdV and GRIN2A projects are different, GRIN2A has seperate anat and dwi folders under the raw folder.
 
 ### The output mif files ("sub-xxx_5tt_coreg.mif", etc) are ready for subsequent tractography based on user-defined ROI files.
 
@@ -31,17 +34,22 @@ ImgCoreg="niftyreg"
 
 ## Project ID:
 
-Proj="kdv" # unused for now
+Proj="grin2aproj" # unused for now
 
 
 ## Participants:
 
-Subjs=("115") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("114" "119" "121" "122" "123" "132" "133") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
 
-Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/kdvproj"
+if [ $Proj == "kdvproj" ]; then
+    Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/kdvproj"
+else
+    Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/grin2aproj"
+fi
+
 Dir_Raw="$Dir_Common/raw"
 Dir_PreProc="$Dir_Common/pre_processing"
 
@@ -56,14 +64,29 @@ for Subj in "${Subjs[@]}"; do
 
     ### Define the folders we're working on/in
 
-    DWI_AP_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*A-P*" -exec basename {} \; | head -n 1) # Find the AP dicom folder
-    DWI_PA_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*P-A*" -exec basename {} \; | head -n 1) # Find the PA dicom folder
-    DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*005*" -exec basename {} \; | head -n 1) # Find the DWI data dicom folder
+
+    if [ $Proj == "kdvproj" ]; then
+        DWI_AP_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*A-P*" -exec basename {} \; | head -n 1) # Find the AP dicom folder
+        DWI_PA_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*P-A*" -exec basename {} \; | head -n 1) # Find the PA dicom folder
+        DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*005*" -exec basename {} \; | head -n 1) # Find the DWI data dicom folder
 
 
-    Dir_Subj_Tmp_DWI_AP_Raw="$Dir_Raw/$Subj/$DWI_AP_Dir_Name_Tmp"
-    Dir_Subj_Tmp_DWI_PA_Raw="$Dir_Raw/$Subj/$DWI_PA_Dir_Name_Tmp"
-    Dir_Subj_Tmp_DWI_DAT_Raw="$Dir_Raw/$Subj/$DWI_DAT_Dir_Name_Tmp"
+        Dir_Subj_Tmp_DWI_AP_Raw="$Dir_Raw/$Subj/$DWI_AP_Dir_Name_Tmp"
+        Dir_Subj_Tmp_DWI_PA_Raw="$Dir_Raw/$Subj/$DWI_PA_Dir_Name_Tmp"
+        Dir_Subj_Tmp_DWI_DAT_Raw="$Dir_Raw/$Subj/$DWI_DAT_Dir_Name_Tmp"
+    
+    else
+
+        DWI_AP_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj/DWI" -type d -name "*A-P*" -exec basename {} \; | head -n 1) # Find the AP dicom folder
+        DWI_PA_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj/DWI" -type d -name "*P-A*" -exec basename {} \; | head -n 1) # Find the PA dicom folder
+        DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj/DWI" -type d -name "*MDDW_64_directions_ep2d_diff_p2" -exec basename {} \; | head -n 1) # Find the DWI data dicom folder
+
+
+        Dir_Subj_Tmp_DWI_AP_Raw="$Dir_Raw/$Subj/DWI/$DWI_AP_Dir_Name_Tmp"
+        Dir_Subj_Tmp_DWI_PA_Raw="$Dir_Raw/$Subj/DWI/$DWI_PA_Dir_Name_Tmp"
+        Dir_Subj_Tmp_DWI_DAT_Raw="$Dir_Raw/$Subj/DWI/$DWI_DAT_Dir_Name_Tmp"
+
+    fi
     
     
     Dir_Subj_Tmp_DWI="$Dir_PreProc/$Subj/dwi"

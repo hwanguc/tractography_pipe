@@ -16,7 +16,7 @@ Proj="grin2aproj" # unused for now
 
 ## Participants:
 
-Subjs=("118" "119" "120" "121" "122" "123" "130" "131" "132" "133")
+Subjs=("g001")
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with subj-SUBJ_ID
 
 ## Directories:

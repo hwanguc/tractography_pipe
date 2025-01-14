@@ -3,6 +3,8 @@
 ## Author: Han Wang
 ### 2 Dec 2024: Initial version
 ### 11 Dec 2024: Added an option to support co-registration by Niftyreg (KCL)
+### 8 Jan 2025: Added support for GRIN2A project.
+### 10 Jan 2025: Added tensor-derived metrics extraction (i.e., ADC, FA, AD, RD, eigenvector).
 
 ### This script performs batch processing of the DWI files and allows for the following options:
 
@@ -19,7 +21,6 @@
 
 ### Note that this script depends on the packages MRTrix3, FSL, Niftyreg, and ANTs (ANTs needed for bias correction).
 
-
 # Common variables (these might move to a higher-level general script which calls specific functions at a later stage):
 
 ## Config:
@@ -34,12 +35,11 @@ ImgCoreg="niftyreg"
 
 ## Project ID:
 
-Proj="grin2aproj" # unused for now
-
+Proj="grin2aproj"
 
 ## Participants:
 
-Subjs=("114" "119" "121" "122" "123" "132" "133") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("g004" "g005") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -56,6 +56,7 @@ Dir_PreProc="$Dir_Common/pre_processing"
 # Preprocessing:
 
 for Subj in "${Subjs[@]}"; do
+
     echo -e "\n"
     echo "Pre-processing started for $Subj"
     echo -e "\n"
@@ -265,6 +266,17 @@ for Subj in "${Subjs[@]}"; do
     5tt2gmwmi $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif $(echo $Subj)_gmwmSeed_coreg.mif
     echo -e "\n"
 
+    ## 5. Extract whole-brain tensor-derived metrics:
+    ### Estimate diffusion tensor based on diffusion-wighted image:
+
+    echo "Estimating the diffusion tensor and generating tensor-derived measures for $Subj"
+
+    dwi2tensor $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif -mask $(echo $Subj)_brainmask_$BrainMask.mif $(echo $Subj)_dt.mif
+
+    ### Generate tensor-derived measures (ADC, FA, AD, RD, eigenvector):
+    tensor2metric $(echo $Subj)_dt.mif -fa $(echo $Subj)_fa.mif -adc $(echo $Subj)_adc.mif -vector $(echo $Subj)_ev.mif -ad $(echo $Subj)_ad.mif -rd $(echo $Subj)_rd.mif
+
+    echo -e "\n"
     echo "Pre-processing completed for $Subj"
     echo -e "\n\n"
 

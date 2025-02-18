@@ -4,7 +4,7 @@
 ### 08 Jan 2025: Added support for GRIN2A project.
 ### 28 Nov 2024: Initial version
 
-### This converts dicom files to nifti and mif formats for further processing. Ensure that the Directories defined below actually exist.
+### This converts dicom files to nifti for further processing. Ensure that the Directories defined below actually exist.
 
 
 # Common variables:
@@ -16,7 +16,7 @@ Proj="grin2aproj" # unused for now
 
 ## Participants:
 
-Subjs=("g001")
+Subjs=("130" "131")
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with subj-SUBJ_ID
 
 ## Directories:

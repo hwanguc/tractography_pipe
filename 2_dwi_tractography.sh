@@ -33,12 +33,12 @@ BrainMask="mrtrix"
 MaskIntThre=0.7 # Set the fractional intensity threshold for the brain mask, only for the use of bet2
 FodNorm="0"
 ImgCoreg="niftyreg"
-Sift="0"
+Sift="1"
 
 
 ## Project ID:
 
-Proj="kdvproj"
+Proj="grin2aproj"
 
 ## ROIs:
 
@@ -50,7 +50,7 @@ Metrics=("fa" "adc" "ad" "rd") # Put your metrics here
 
 ## Participants:
 
-Subjs=("113" "115") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("114" "119" "121" "122" "123" "132" "133" "g001" "g002" "g003" "g004" "g005") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -71,7 +71,7 @@ if [ ! -d "$Dir_Output" ]; then
     echo "Folder created: $Dir_Output"
 fi
 
-Output_Filename="output_tract_metrics.txt"
+Output_Filename="output_tract_metrics_sift$(echo $Sift).txt"
 
 if [ -f "$Dir_Output/$Output_Filename" ]; then
     echo -e "\n\n"
@@ -125,7 +125,7 @@ for Subj in "${Subjs[@]}"; do
     #### Generate left arcuate fasciculus (AF) tracks:
 
     echo "Generating the arcuate fasciculus (AF) tracks for $Subj"
-    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_leftaf_excl.mif -nthreads 8 -maxlength 250 -cutoff 0.06 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_leftaf_excl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
     echo -e "\n"
 
     
@@ -206,12 +206,3 @@ for Subj in "${Subjs[@]}"; do
     echo "Metrics extraction completed for $Subj"
 
 done
-
-
-
-
-
-    
-
-
-

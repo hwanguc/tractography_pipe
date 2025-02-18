@@ -5,6 +5,7 @@
 ### 11 Dec 2024: Added an option to support co-registration by Niftyreg (KCL)
 ### 8 Jan 2025: Added support for GRIN2A project.
 ### 10 Jan 2025: Added tensor-derived metrics extraction (i.e., ADC, FA, AD, RD, eigenvector).
+### 18 Feb 2025: Moved dwi dicom to nifti steps to a seperate script (0_dcmconvert.sh), so the user can inspect data quality and realign dwi with anat data for a corrected origin/orientation manually in SPM.
 
 ### This script performs batch processing of the DWI files and allows for the following options:
 
@@ -39,7 +40,7 @@ Proj="grin2aproj"
 
 ## Participants:
 
-Subjs=("g004" "g005") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("130" "131") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -63,40 +64,12 @@ for Subj in "${Subjs[@]}"; do
 
     ## 1. File Conversion and Curation:
 
-    ### Define the folders we're working on/in
-
-
-    if [ $Proj == "kdvproj" ]; then
-        DWI_AP_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*A-P*" -exec basename {} \; | head -n 1) # Find the AP dicom folder
-        DWI_PA_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*P-A*" -exec basename {} \; | head -n 1) # Find the PA dicom folder
-        DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*005*" -exec basename {} \; | head -n 1) # Find the DWI data dicom folder
-
-
-        Dir_Subj_Tmp_DWI_AP_Raw="$Dir_Raw/$Subj/$DWI_AP_Dir_Name_Tmp"
-        Dir_Subj_Tmp_DWI_PA_Raw="$Dir_Raw/$Subj/$DWI_PA_Dir_Name_Tmp"
-        Dir_Subj_Tmp_DWI_DAT_Raw="$Dir_Raw/$Subj/$DWI_DAT_Dir_Name_Tmp"
-    
-    else
-
-        DWI_AP_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj/DWI" -type d -name "*A-P*" -exec basename {} \; | head -n 1) # Find the AP dicom folder
-        DWI_PA_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj/DWI" -type d -name "*P-A*" -exec basename {} \; | head -n 1) # Find the PA dicom folder
-        DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj/DWI" -type d -name "*MDDW_64_directions_ep2d_diff_p2" -exec basename {} \; | head -n 1) # Find the DWI data dicom folder
-
-
-        Dir_Subj_Tmp_DWI_AP_Raw="$Dir_Raw/$Subj/DWI/$DWI_AP_Dir_Name_Tmp"
-        Dir_Subj_Tmp_DWI_PA_Raw="$Dir_Raw/$Subj/DWI/$DWI_PA_Dir_Name_Tmp"
-        Dir_Subj_Tmp_DWI_DAT_Raw="$Dir_Raw/$Subj/DWI/$DWI_DAT_Dir_Name_Tmp"
-
-    fi
-    
-    
     Dir_Subj_Tmp_DWI="$Dir_PreProc/$Subj/dwi"
 
     if [ ! -d "$Dir_Subj_Tmp_DWI" ]; then
-        mkdir -p "$Dir_Subj_Tmp_DWI"
-        echo "Folder created: $Dir_Subj_Tmp_DWI"
+        echo "Error: folder $Dir_Subj_Tmp_DWI not found! Please convert the raw DWI dicom to NIFTI first!"
+        exit 1
     fi
-
 
     ### Change the working directory to the current subject's DWI folder
 
@@ -105,29 +78,22 @@ for Subj in "${Subjs[@]}"; do
     cd "$Dir_Subj_Tmp_DWI" || exit
     echo -e "\n\n"
 
-    ### Conversion from DWI dicom to Nifti and MIF for the current subject
 
-    echo "Conversion from DWI dicom to nifti and mif started for $Subj"
-    echo -e "\n"
-
-    mrconvert $Dir_Subj_Tmp_DWI_AP_Raw "$(echo $Subj)_b0.nii.gz" -stride 1,2,3 # convert the AP file to nii.gz
-    mrconvert $Dir_Subj_Tmp_DWI_PA_Raw "$(echo $Subj)_b0_flip.nii.gz" -stride 1,2,3 # convert the PA file to nii.gz
-    mrconvert $Dir_Subj_Tmp_DWI_DAT_Raw "$(echo $Subj)_dwi.mif" # convert the DWI data file to mif
-
-    echo "Conversion from DWI dicom to nifti and mif FINISHED for $Subj"
-    echo -e "\n"
-
+    ### merge AP and PA b0s for the current subj and convert to mif:
     echo "Merging AP and PA b0s into b0_pair.mif for $Subj"
-    ### merge AP and PA b0s for the current subj
     fslmerge -t "$(echo $Subj)_b0_pair.nii.gz" "$(echo $Subj)_b0.nii.gz" "$(echo $Subj)_b0_flip.nii.gz"
     mrconvert "$(echo $Subj)_b0_pair.nii.gz" "$(echo $Subj)_b0_pair.mif"
     echo -e "\n\n"
+
+
 
     ## 2. Data pipelines:
 
     ### Denoise the data using dwi_noise (note that here we also save the "noise" to a mif):
     echo -e "\n"
     echo "Denoising the DWI data for $Subj"
+
+    #mrconvert "$(echo $Subj)_dwi.nii" "$(echo $Subj)_dwi.mif"
     dwidenoise "$(echo $Subj)_dwi.mif" "$(echo $Subj)_den.mif" -noise "$(echo $Subj)_noise.mif"
     echo -e "\n"
 
@@ -206,6 +172,7 @@ for Subj in "${Subjs[@]}"; do
 
     ### copy the T1 mif file to the dwi folder
     cp $Dir_PreProc/$Subj/anat/$(echo $Subj)_T1w.mif ./$(echo $Subj)_T1w.mif
+    #mrconvert $(echo $Subj)_T1w.nii $(echo $Subj)_T1w.mif
 
     ### segment the anatomical image into the five tissue types:
     echo "Creating tissue boundaries for the five tissues for $Subj"

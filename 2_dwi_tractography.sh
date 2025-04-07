@@ -14,7 +14,7 @@
 #### SIFT2 (for streamline filtering): 0 (off) or 1 (on), default 0.
 
 #### Project ID: "kdvproj" or "grin2aproj".
-#### Supported ROIs names: "cc" (corpus callosum) and "leftaf" (left arcuate fasciculus).
+#### Supported ROIs names: "cc" (corpus callosum), "leftaf" (left arcuate fasciculus), and "rightaf" (right arcuate fasciculus).
 #### Filenames of the ROIs should be in the format of "sub-113_roi_roiname_seed.mif" (seed region), "sub-113_roi_roiname_incl.mif" (include region), and "sub-113_roi_roiname_excl.mif" (exclude region). 
 #### Alternatively, "sub-113_roiname.mif" if only one ROI is used.
 #### Supported metrics: "fa" (fractional anisotropy), "adc" (apparent diffusion coefficient), "ad" (axial diffusivity), "rd" (radial diffusivity).
@@ -42,7 +42,7 @@ Proj="grin2aproj"
 
 ## ROIs:
 
-ROIs=("cc" "leftaf") # Put your ROI names here
+ROIs=("cc" "leftaf" "rightaf") # Put your ROI names here
 
 ## Metrics:
 
@@ -50,7 +50,7 @@ Metrics=("fa" "adc" "ad" "rd") # Put your metrics here
 
 ## Participants:
 
-Subjs=("114" "119" "121" "122" "123" "132" "133" "g001" "g002" "g003" "g004" "g005") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("114") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -71,7 +71,7 @@ if [ ! -d "$Dir_Output" ]; then
     echo "Folder created: $Dir_Output"
 fi
 
-Output_Filename="output_tract_metrics_sift$(echo $Sift).txt"
+Output_Filename="250331_output_tract_metrics_sift$(echo $Sift).txt"
 
 if [ -f "$Dir_Output/$Output_Filename" ]; then
     echo -e "\n\n"
@@ -124,8 +124,17 @@ for Subj in "${Subjs[@]}"; do
 
     #### Generate left arcuate fasciculus (AF) tracks:
 
-    echo "Generating the arcuate fasciculus (AF) tracks for $Subj"
-    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_leftaf_excl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    echo "Generating the left arcuate fasciculus (AF) tracks for $Subj"
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    #tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl4_hw.mif -exclude sub-114_roi_leftaf_excl3.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    #tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    echo -e "\n"
+
+
+    #### Generate right arcuate fasciculus (AF) tracks:
+
+    echo "Generating the right arcuate fasciculus (AF) tracks for $Subj"
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_rightaf_seed.mif -include $(echo $Subj)_roi_rightaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_rightaf.tck -force
     echo -e "\n"
 
     

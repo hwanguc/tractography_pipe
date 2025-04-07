@@ -36,11 +36,11 @@ ImgCoreg="niftyreg"
 
 ## Project ID:
 
-Proj="grin2aproj"
+Proj="kdvproj"
 
 ## Participants:
 
-Subjs=("130" "131") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("113" "115" "116" "117" "126" "127" "128" "k304" "k308" "k309" "k345" "k347" "k373" "k374") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -113,7 +113,7 @@ for Subj in "${Subjs[@]}"; do
 
     ### Run preprocessing (note that the eddy options here are for single-shell data as in our case, might allow opt for multi shell in a later version):
     echo "Runnning the DWIFSL preprocessing pipeline for $Subj"
-    dwifslpreproc $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol"
+    dwifslpreproc $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol" -eddyqc_all eddy_qc
     echo -e "\n"
 
     ### Generate a whole-brain mask

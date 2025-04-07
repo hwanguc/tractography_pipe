@@ -19,11 +19,12 @@ DWI2Nifti="1"
 ## Project: "kdvproj" or "grin2aproj"
 ### The directory structure for KdV and GRIN2A projects are different, GRIN2A has seperate anat and dwi folders under the raw folder.
 
-Proj="grin2aproj" # unused for now
+Proj="kdvproj" # unused for now
 
 ## Participants:
 
-Subjs=("130" "131")
+### KdV project list: Subjs=("113" "115" "116" "117" "126" "127" "128" "k304" "k308" "k309" "k345" "k347" "k373" "k374")
+Subjs=("113" "115" "116" "117" "126" "127" "128" "k308" "k309" "k345" "k347" "k373" "k374")
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with subj-SUBJ_ID
 
 ## Directories:
@@ -51,7 +52,7 @@ for Subj in "${Subjs[@]}"; do
                 
         DWI_AP_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*A-P*" -exec basename {} \; | head -n 1) # Find the AP dicom folder
         DWI_PA_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*P-A*" -exec basename {} \; | head -n 1) # Find the PA dicom folder
-        DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*005*" -exec basename {} \; | head -n 1) # Find the DWI data dicom folder
+        DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type d -name "*ep2d_diff*" -exec basename {} \; | head -n 1) # Find the DWI data dicom folder
 
         Dir_Subj_Tmp_DWI_AP_Raw="$Dir_Raw/$Subj/$DWI_AP_Dir_Name_Tmp"
         Dir_Subj_Tmp_DWI_PA_Raw="$Dir_Raw/$Subj/$DWI_PA_Dir_Name_Tmp"
@@ -90,11 +91,16 @@ for Subj in "${Subjs[@]}"; do
             echo "Folder created: $Dir_Subj_Tmp_T1_Proc"
         fi
 
-        mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
-        mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
-        echo -e "\n"
-    fi
 
+        if find $Dir_Subj_Tmp_T1_Raw -type f -name "*.dcm" | grep -q .; then        
+            mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
+            mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
+        else
+            mrconvert "$(find $Dir_Subj_Tmp_T1_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
+            mrconvert "$(find $Dir_Subj_Tmp_T1_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
+        fi
+    echo -e "\n"
+    fi
 
     if [ $DWI2Nifti == "1" ]; then
 
@@ -106,9 +112,18 @@ for Subj in "${Subjs[@]}"; do
             echo "Folder created: $Dir_Subj_Tmp_DWI"
         fi
 
-        mrconvert $Dir_Subj_Tmp_DWI_AP_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0.nii.gz" -stride 1,2,3 # convert the AP file to nii.gz
-        mrconvert $Dir_Subj_Tmp_DWI_PA_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0_flip.nii.gz" -stride 1,2,3 # convert the PA file to nii.gz
-        mrconvert $Dir_Subj_Tmp_DWI_DAT_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_dwi.mif" # convert the DWI data file to mif
+
+        if find $Dir_Subj_Tmp_DWI_DAT_Raw -type f -name "*.dcm" | grep -q .; then
+            mrconvert $Dir_Subj_Tmp_DWI_AP_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0.nii.gz" -stride 1,2,3 # convert the AP file to nii.gz
+            mrconvert $Dir_Subj_Tmp_DWI_PA_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0_flip.nii.gz" -stride 1,2,3 # convert the PA file to nii.gz
+            mrconvert $Dir_Subj_Tmp_DWI_DAT_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_dwi.mif" # convert the DWI data file to mif
+        else
+            mrconvert "$(find $Dir_Subj_Tmp_DWI_AP_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0.nii.gz" -stride 1,2,3 # convert the AP file to nii.gz
+            mrconvert "$(find $Dir_Subj_Tmp_DWI_PA_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0_flip.nii.gz" -stride 1,2,3 # convert the PA file to nii.gz
+            mrconvert "$(find $Dir_Subj_Tmp_DWI_DAT_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_DWI/$(echo $Subj)_dwi.mif" -fslgrad "$(find $Dir_Subj_Tmp_DWI_DAT_Raw/nifti_series -type f -name "*.bvec" | head -n 1)" "$(find $Dir_Subj_Tmp_DWI_DAT_Raw/nifti_series -type f -name "*.bval" | head -n 1)" # convert the DWI data file to mif
+        fi
+
+
 
         echo "Conversion from DWI dicom to nifti and mif FINISHED for $Subj"
         echo -e "\n\n"

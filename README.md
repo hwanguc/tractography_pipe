@@ -1,6 +1,6 @@
 # Tractography pipeline:
 
-This repository contains a pipeline for **pre-processing** the diffusion-weighted magnetic resonance imaging data and for running the **tractography** analysis, mainly using [MRTrix3] (https://www.mrtrix.org/).
+This repository contains a pipeline for **pre-processing** the diffusion-weighted magnetic resonance imaging data and for running the **tractography** analysis, mainly using [MRTrix3](https://www.mrtrix.org/).
 
 **Pipeline (batch processing):**
 

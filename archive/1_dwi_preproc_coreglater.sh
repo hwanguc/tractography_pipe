@@ -6,7 +6,7 @@
 ### 8 Jan 2025: Added support for GRIN2A project.
 ### 10 Jan 2025: Added tensor-derived metrics extraction (i.e., ADC, FA, AD, RD, eigenvector).
 ### 18 Feb 2025: Moved dwi dicom to nifti steps to a seperate script (0_dcmconvert.sh), so the user can inspect data quality and realign dwi with anat data for a corrected origin/orientation manually in SPM.
-### 6 May 2025: The script is updated to do coregistration prior to the 5tt tissue map generation, so tha the tissue map is based on co-registered T1 image, not the original one.
+
 
 ### This script performs batch processing of the DWI files and allows for the following options:
 

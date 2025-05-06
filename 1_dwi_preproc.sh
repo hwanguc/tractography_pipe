@@ -6,6 +6,7 @@
 ### 8 Jan 2025: Added support for GRIN2A project.
 ### 10 Jan 2025: Added tensor-derived metrics extraction (i.e., ADC, FA, AD, RD, eigenvector).
 ### 18 Feb 2025: Moved dwi dicom to nifti steps to a seperate script (0_dcmconvert.sh), so the user can inspect data quality and realign dwi with anat data for a corrected origin/orientation manually in SPM.
+### 6 May 2025: The script is updated to do coregistration prior to the 5tt tissue map generation, so tha the tissue map is based on co-registered T1 image, not the original one.
 
 ### This script performs batch processing of the DWI files and allows for the following options:
 
@@ -167,20 +168,12 @@ for Subj in "${Subjs[@]}"; do
     fi
 
 
-    ## 3. Creating tissue boundaries (copy the anat/mif file to dwi folder):
-    ### Will give an option below to use the "niftyreg" package (use the KCL one)
 
+    ## 3. Coregister the diffusion and anatomical images:
+    
     ### copy the T1 mif file to the dwi folder
     cp $Dir_PreProc/$Subj/anat/$(echo $Subj)_T1w.mif ./$(echo $Subj)_T1w.mif
-    #mrconvert $(echo $Subj)_T1w.nii $(echo $Subj)_T1w.mif
-
-    ### segment the anatomical image into the five tissue types:
-    echo "Creating tissue boundaries for the five tissues for $Subj"
-    5ttgen fsl $(echo $Subj)_T1w.mif $(echo $Subj)_5tt_nocoreg.mif
-    echo -e "\n\n"
-
-
-    ## 4. Coregister the diffusion and anatomical images:
+    cp $Dir_PreProc/$Subj/anat/$(echo $Subj)_T1w.nii.gz ./$(echo $Subj)_T1w.nii.gz
 
     echo "Coregistering the diffusion and anatomical images for $Subj"
     ### average together the b0 images:
@@ -188,10 +181,6 @@ for Subj in "${Subjs[@]}"; do
 
     ### convert both the segmented anatomical image and the mean b0 image we just generated:
     mrconvert $(echo $Subj)_mean_b0.mif $(echo $Subj)_mean_b0.nii.gz
-    mrconvert $(echo $Subj)_5tt_nocoreg.mif $(echo $Subj)_5tt_nocoreg.nii.gz
-
-    ### extract the first vol of the 5-tissue segmented dataset, which corresponds to the grey matter segmentation
-    fslroi $(echo $Subj)_5tt_nocoreg.nii.gz $(echo $Subj)_5tt_vol0.nii.gz 0 1
 
     echo -e "\n"
 
@@ -199,17 +188,17 @@ for Subj in "${Subjs[@]}"; do
 
     if [ ImgCoreg == "flirt" ]; then
         ### Now, coregister the two datasets (mean_b0 and grey matter anatomy, anatomy as a ref, the output file is a transformation matrix):
-        flirt -in $(echo $Subj)_mean_b0.nii.gz -ref $(echo $Subj)_5tt_vol0.nii.gz -interp nearestneighbour -dof 6 -omat $(echo $Subj)_diff2struct_$(echo $ImgCoreg).mat
+        flirt -in $(echo $Subj)_mean_b0.nii.gz -ref $(echo $Subj)_T1w.nii.gz -interp nearestneighbour -dof 6 -omat $(echo $Subj)_diff2struct_$(echo $ImgCoreg).mat
 
         ### transform the matrix into a form that is readable by MRtrix
-        transformconvert $(echo $Subj)_diff2struct_$(echo $ImgCoreg).mat $(echo $Subj)_mean_b0.nii.gz $(echo $Subj)_5tt_nocoreg.nii.gz flirt_import $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_mrtrix.txt
+        transformconvert $(echo $Subj)_diff2struct_$(echo $ImgCoreg).mat $(echo $Subj)_mean_b0.nii.gz $(echo $Subj)_T1w.nii.gz flirt_import $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_mrtrix.txt
 
         ### Now, we do the inverse - register the diffusion image to the anatomical image:
-        mrtransform $(echo $Subj)_5tt_nocoreg.mif -linear $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_mrtrix.txt -inverse $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif
+        mrtransform $(echo $Subj)_T1w.mif -linear $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_mrtrix.txt -inverse $(echo $Subj)_T1w_coreg_$(echo $ImgCoreg).mif
 
     else
         ### Generate the transformation matrix with Niftyreg, ref image T1, floating image mean b0
-        reg_aladin -ref $(echo $Subj)_5tt_vol0.nii.gz -flo $(echo $Subj)_mean_b0.nii.gz -interp 0 -aff $(echo $Subj)_diff2struct_$(echo $ImgCoreg).txt
+        reg_aladin -ref $(echo $Subj)_T1w.nii.gz -flo $(echo $Subj)_mean_b0.nii.gz -interp 0 -aff $(echo $Subj)_diff2struct_$(echo $ImgCoreg).txt
 
         ### Calculate the inverse matrix from the transformation matrix for using T1 as floating image
         reg_transform -invAff $(echo $Subj)_diff2struct_$(echo $ImgCoreg).txt $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt
@@ -218,10 +207,20 @@ for Subj in "${Subjs[@]}"; do
         mrgrid $(echo $Subj)_mean_b0.nii.gz regrid -voxel 1 $(echo $Subj)_mean_b0_1mm-iso.nii.gz
 
         ### Register T1 onto the DWI image using the inverse matrix calculated above
-        reg_resample -ref $(echo $Subj)_mean_b0_1mm-iso.nii.gz -flo $(echo $Subj)_5tt_nocoreg.nii.gz -trans $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt -inter 0 -res $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).nii.gz
+        reg_resample -ref $(echo $Subj)_mean_b0_1mm-iso.nii.gz -flo $(echo $Subj)_T1w.nii.gz -trans $(echo $Subj)_diff2struct_$(echo $ImgCoreg)_inverse.txt -inter 0 -res $(echo $Subj)_T1w_coreg_$(echo $ImgCoreg).nii.gz
 
-        mrconvert $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).nii.gz $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif
+        mrconvert $(echo $Subj)_T1w_coreg_$(echo $ImgCoreg).nii.gz $(echo $Subj)_T1w_coreg_$(echo $ImgCoreg).mif
     fi
+    
+    
+
+    ## 4. Creating tissue boundaries (based on the coregistered T1 image):
+
+    ### segment the anatomical image into the five tissue types:
+    echo "Creating tissue boundaries for the five tissues for $Subj"
+    5ttgen fsl $(echo $Subj)_T1w_coreg_$(echo $ImgCoreg).mif $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif
+    echo -e "\n\n"
+
 
     #### we can view the coreg:
     #mrview $(echo $Subj)_den_preproc_unbiased.mif -overlay.load $(echo $Subj)_5tt_nocoreg.mif -overlay.colourmap 2 -overlay.load $(echo $Subj)_5tt_coreg.mif -overlay.colourmap 1
@@ -232,6 +231,7 @@ for Subj in "${Subjs[@]}"; do
     ### Now create the seed boundaries for streamline processing later
     5tt2gmwmi $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif $(echo $Subj)_gmwmSeed_coreg.mif
     echo -e "\n"
+
 
     ## 5. Extract whole-brain tensor-derived metrics:
     ### Estimate diffusion tensor based on diffusion-wighted image:

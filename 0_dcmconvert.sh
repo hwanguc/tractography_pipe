@@ -19,12 +19,12 @@ DWI2Nifti="1"
 ## Project: "kdvproj" or "grin2aproj"
 ### The directory structure for KdV and GRIN2A projects are different, GRIN2A has seperate anat and dwi folders under the raw folder.
 
-Proj="kdvproj" # unused for now
+Proj="grin2aproj" # unused for now
 
 ## Participants:
 
 ### KdV project list: Subjs=("113" "115" "116" "117" "126" "127" "128" "k304" "k308" "k309" "k345" "k347" "k373" "k374")
-Subjs=("113" "115" "116" "117" "126" "127" "128" "k308" "k309" "k345" "k347" "k373" "k374")
+Subjs=("114") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113"
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with subj-SUBJ_ID
 
 ## Directories:

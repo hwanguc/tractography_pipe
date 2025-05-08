@@ -37,11 +37,11 @@ ImgCoreg="niftyreg"
 
 ## Project ID:
 
-Proj="kdvproj"
+Proj="grin2aproj"
 
 ## Participants:
 
-Subjs=("113" "115" "116" "117" "126" "127" "128" "k304" "k308" "k309" "k345" "k347" "k373" "k374") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("123" "130" "131" "132" "133" "g001" "g002" "g003" "g004" "g005" "g006") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -173,7 +173,7 @@ for Subj in "${Subjs[@]}"; do
     
     ### copy the T1 mif file to the dwi folder
     cp $Dir_PreProc/$Subj/anat/$(echo $Subj)_T1w.mif ./$(echo $Subj)_T1w.mif
-    cp $Dir_PreProc/$Subj/anat/$(echo $Subj)_T1w.nii.gz ./$(echo $Subj)_T1w.nii.gz
+    cp $Dir_PreProc/$Subj/anat/$(echo $Subj)_T1w.nii ./$(echo $Subj)_T1w.nii
 
     echo "Coregistering the diffusion and anatomical images for $Subj"
     ### average together the b0 images:
@@ -181,6 +181,7 @@ for Subj in "${Subjs[@]}"; do
 
     ### convert both the segmented anatomical image and the mean b0 image we just generated:
     mrconvert $(echo $Subj)_mean_b0.mif $(echo $Subj)_mean_b0.nii.gz
+    mrconvert $(echo $Subj)_T1w.nii $(echo $Subj)_T1w.nii.gz
 
     echo -e "\n"
 

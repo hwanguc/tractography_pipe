@@ -37,11 +37,11 @@ ImgCoreg="niftyreg"
 
 ## Project ID:
 
-Proj="kdvproj"
+Proj="grin2aproj"
 
 ## Participants:
 
-Subjs=("113" "115" "116" "117" "126" "127" "128" "k304" "k308" "k309" "k345" "k347" "k373" "k374") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("0020" "0437" "0903" "0922" "1050" "1098" "1117" "1266" "1527" "1572" "1690" "1726" "g008" "g010") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:

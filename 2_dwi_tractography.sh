@@ -43,7 +43,7 @@ Proj="grin2aproj"
 
 ## ROIs:
 
-ROIs=("cc" "leftaf" "rightaf", "leftfornix", "rightfornix") # Put your ROI names here
+ROIs=("cc" "leftaf" "rightaf" "leftfornix" "rightfornix") # Put your ROI names here
 
 ## Metrics:
 
@@ -51,7 +51,9 @@ Metrics=("fa" "adc" "ad" "rd") # Put your metrics here
 
 ## Participants:
 
-Subjs=("119" "121" "122" "123" "130" "131" "132" "133" "g001" "g002" "g003" "g004" "g005" "g006") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("g003" "g004" "g005" "g006")
+#Subjs=("114" "119" "121" "122" "123" "130" "131" "132" "133" "g001" "g002" "g003" "g004" "g005" "g006") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113"
+#Subjs=("119")
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
@@ -72,7 +74,7 @@ if [ ! -d "$Dir_Output" ]; then
     echo "Folder created: $Dir_Output"
 fi
 
-Output_Filename="250509_output_tract_metrics_sift$(echo $Sift).txt"
+Output_Filename="250602_output_allsubj_tract_metrics_sift$(echo $Sift).txt"
 
 if [ -f "$Dir_Output/$Output_Filename" ]; then
     echo -e "\n\n"

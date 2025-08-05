@@ -7,6 +7,8 @@
 ### 10 Jan 2025: Added tensor-derived metrics extraction (i.e., ADC, FA, AD, RD, eigenvector).
 ### 18 Feb 2025: Moved dwi dicom to nifti steps to a seperate script (0_dcmconvert.sh), so the user can inspect data quality and realign dwi with anat data for a corrected origin/orientation manually in SPM.
 ### 6 May 2025: The script is updated to do coregistration prior to the 5tt tissue map generation, so tha the tissue map is based on co-registered T1 image, not the original one.
+### 23 Jul 2025: Added support for the FOXP2 cohort.
+### 28 Jul 2025: Added support for the preterm cohort and multi-shell data processing.
 
 ### This script performs batch processing of the DWI files and allows for the following options:
 
@@ -17,7 +19,7 @@
 #### FOD normalisation (for fixel-based analysis): 0 (off) or 1 (on), default 0.
 #### Package for image co-registration (dwi and anat): flirt (uing flirt in fsl) or niftyreg (using niftyreg-KCL version), default "flirt".
 
-#### Project ID: "kdvproj" or "grin2aproj". The directory structure for KdV and GRIN2A projects are different, GRIN2A has seperate anat and dwi folders under the raw folder.
+#### Supported Project ID: "kdvproj", "grin2aproj", "foxp2proj". The directory structure for KdV and GRIN2A projects are different, GRIN2A has seperate anat and dwi folders under the raw folder.
 
 ### The output mif files ("sub-xxx_5tt_coreg.mif", etc) are ready for subsequent tractography based on user-defined ROI files.
 
@@ -37,19 +39,23 @@ ImgCoreg="niftyreg"
 
 ## Project ID:
 
-Proj="grin2aproj"
+Proj="pretermproj" # "pretermproj" is multishell data.
 
 ## Participants:
 
-Subjs=("0020" "0437" "0903" "0922" "1050" "1098" "1117" "1266" "1527" "1572" "1690" "1726" "g008" "g010") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
+Subjs=("PDM047") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113" 
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
 
 ## Directories:
 
 if [ $Proj == "kdvproj" ]; then
     Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/kdvproj"
-else
+elif [ $Proj == "foxp2proj" ]; then
+    Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/foxp2proj"
+elif [ $Proj == "grin2aproj" ]; then
     Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/grin2aproj"
+else
+    Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/pretermproj"
 fi
 
 Dir_Raw="$Dir_Common/raw"
@@ -114,7 +120,15 @@ for Subj in "${Subjs[@]}"; do
 
     ### Run preprocessing (note that the eddy options here are for single-shell data as in our case, might allow opt for multi shell in a later version):
     echo "Runnning the DWIFSL preprocessing pipeline for $Subj"
-    dwifslpreproc $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol" -eddyqc_all eddy_qc
+
+    if [ $Proj == "pretermproj" ]; then
+        echo "Running dwifslpreproc for multi-shell DWI file for $Subj"
+        dwifslpreproc $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol --slm=linear" -eddyqc_all eddy_qc
+    else
+        echo "Running dwifslpreproc for single-shell DWI file for $Subj"
+        dwifslpreproc $(echo $Subj)_den_gbsrm$(echo $GibbsRm).mif $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc.mif -nocleanup -pe_dir AP -rpe_pair -se_epi $(echo $Subj)_b0_pair.mif -eddy_options " --repol" -eddyqc_all eddy_qc
+    fi
+
     echo -e "\n"
 
     ### Generate a whole-brain mask
@@ -147,24 +161,49 @@ for Subj in "${Subjs[@]}"; do
     ### Constrained Spherical Deconvolution
 
     #### a basis function from the diffusion data (note this is for single-shell data, might add more options for multi-shell data)
-    echo "Estimating a basis function from the diffusion data for $Subj"
-    dwi2response tournier $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt
+
+    if [ $Proj == "pretermproj" ]; then
+        echo "Estimating a basis function from the multi-shell diffusion data for $Subj"
+        dwi2response dhollander $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_wm.txt $(echo $Subj)_gm.txt $(echo $Subj)_csf.txt -voxels $(echo $Subj)_voxels.mif
+    else
+        echo "Estimating a basis function from the single-shell diffusion data for $Subj"
+        dwi2response tournier $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt
+    fi
     echo -e "\n"
 
     #### use the basis functions to estimate fibre orientation density (FOD, note that csd is only for single-shell, might need to add more options for multi-shell data later)
-    echo "Estimating the fibre orientation density (FOD) for $Subj"
-    dwi2fod csd $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt $(echo $Subj)_fod.mif -mask  $(echo $Subj)_brainmask_$BrainMask.mif
+
+    if [ $Proj == "pretermproj" ]; then
+        echo "Estimating the fibre orientation density (FOD) for multi-shell diffusion data for $Subj"
+        dwi2fod msmt_csd $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_wm.txt $(echo $Subj)_wm_fod.mif $(echo $Subj)_gm.txt $(echo $Subj)_gm_fod.mif $(echo $Subj)_csf.txt $(echo $Subj)_csf_fod.mif -mask  $(echo $Subj)_brainmask_$BrainMask.mif
+    else
+        echo "Estimating the fibre orientation density (FOD) for single-shell diffusion data for $Subj"
+        dwi2fod csd $(echo $Subj)_den_gbsrm$(echo $GibbsRm)_preproc_biascorr$(echo $BiasCorr).mif $(echo $Subj)_csd.txt $(echo $Subj)_fod.mif -mask  $(echo $Subj)_brainmask_$BrainMask.mif
+    fi
     echo -e "\n"
 
     #### now we normalise the FODs (optional - for fixel based analysis)
 
-    if [ FodNorm == "1" ]; then
-        echo "Normalising the FODs for $Subj"
-        mtnormalise $(echo $Subj)_fod.mif $(echo $Subj)_fod_norm$(echo $FodNorm).mif -mask $(echo $Subj)_brainmask_$BrainMask.mif
-        echo -e "\n\n"
+    if [ $Proj == "pretermproj" ]; then
+        if [ $FodNorm == "1" ]; then
+            echo "Normalising the FODs for $Subj"
+            mtnormalise $(echo $Subj)_wm_fod.mif $(echo $Subj)_wm_fod_norm$(echo $FodNorm).mif $(echo $Subj)_gm_fod.mif $(echo $Subj)_gm_fod_norm$(echo $FodNorm).mif $(echo $Subj)_csf_fod.mif $(echo $Subj)_csf_fod_norm$(echo $FodNorm).mif -mask $(echo $Subj)_brainmask_$BrainMask.mif
+            echo -e "\n\n"
+        else
+            cp ./$(echo $Subj)_wm_fod.mif ./$(echo $Subj)_wm_fod_norm$(echo $FodNorm).mif
+            cp ./$(echo $Subj)_gm_fod.mif ./$(echo $Subj)_gm_fod_norm$(echo $FodNorm).mif
+            cp ./$(echo $Subj)_csf_fod.mif ./$(echo $Subj)_csf_fod_norm$(echo $FodNorm).mif
+            echo -e "\n"
+        fi
     else
-        cp ./$(echo $Subj)_fod.mif ./$(echo $Subj)_fod_norm$(echo $FodNorm).mif
-        echo -e "\n"
+        if [ $FodNorm == "1" ]; then
+            echo "Normalising the FODs for $Subj"
+            mtnormalise $(echo $Subj)_fod.mif $(echo $Subj)_fod_norm$(echo $FodNorm).mif -mask $(echo $Subj)_brainmask_$BrainMask.mif
+            echo -e "\n\n"
+        else
+            cp ./$(echo $Subj)_fod.mif ./$(echo $Subj)_fod_norm$(echo $FodNorm).mif
+            echo -e "\n"
+        fi
     fi
 
 
@@ -187,7 +226,7 @@ for Subj in "${Subjs[@]}"; do
 
     echo "Registering 5-tissue boundaries onto DWI image (using the inverse DWI to 5tt transformation matrix) for $Subj using $ImgCoreg"
 
-    if [ ImgCoreg == "flirt" ]; then
+    if [ $ImgCoreg == "flirt" ]; then
         ### Now, coregister the two datasets (mean_b0 and grey matter anatomy, anatomy as a ref, the output file is a transformation matrix):
         flirt -in $(echo $Subj)_mean_b0.nii.gz -ref $(echo $Subj)_T1w.nii.gz -interp nearestneighbour -dof 6 -omat $(echo $Subj)_diff2struct_$(echo $ImgCoreg).mat
 

@@ -3,6 +3,7 @@
 ## Author: Han Wang
 ### 13 Jan 2025: Initial version
 ### 25 May 2025: Updated to include left and right fornix ROIs.
+### 22 July 2025: Added support for FOXP2 project.
 
 ### This script performs batch-processing of diffusion-weighted imaging (DWI) data for multiple subjects and extracts tensor-derived metrics (i.e., ADC, FA, AD, RD, eigenvector) from multiple ROIs.
 
@@ -14,7 +15,7 @@
 #### Package for image co-registration (dwi and anat): flirt (uing flirt in fsl) or niftyreg (using niftyreg-KCL version), default "flirt".
 #### SIFT2 (for streamline filtering): 0 (off) or 1 (on), default 0.
 
-#### Project ID: "kdvproj" or "grin2aproj".
+#### Project ID: "kdvproj", "grin2aproj", or "foxp2proj".
 #### Supported ROIs names: "cc" (corpus callosum), "leftaf" (left arcuate fasciculus), and "rightaf" (right arcuate fasciculus).
 #### Filenames of the ROIs should be in the format of "sub-113_roi_roiname_seed.mif" (seed region), "sub-113_roi_roiname_incl.mif" (include region), and "sub-113_roi_roiname_excl.mif" (exclude region). 
 #### Alternatively, "sub-113_roiname.mif" if only one ROI is used.
@@ -33,13 +34,22 @@ BiasCorr="0"
 BrainMask="mrtrix"
 MaskIntThre=0.7 # Set the fractional intensity threshold for the brain mask, only for the use of bet2
 FodNorm="0"
+FodMode="multi-shell"
+
+if [ $FodMode == "multi-shell" ]; then
+    $FodString = "wm_fod"
+else
+    $FodString = "fod"
+fi
+
 ImgCoreg="niftyreg"
 Sift="1"
 
 
+
 ## Project ID:
 
-Proj="grin2aproj"
+Proj="foxp2proj"
 
 ## ROIs:
 
@@ -51,7 +61,8 @@ Metrics=("fa" "adc" "ad" "rd") # Put your metrics here
 
 ## Participants:
 
-Subjs=("g003" "g004" "g005" "g006")
+Subjs=("123")
+#Subjs=("1690" "0020" "0437" "0903" "0922" "1050" "1098" "1117" "1266" "1527" "1572" "1726" "g008" "g010")
 #Subjs=("114" "119" "121" "122" "123" "130" "131" "132" "133" "g001" "g002" "g003" "g004" "g005" "g006") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113"
 #Subjs=("119")
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with the format "sub-SUBJ_ID"
@@ -60,6 +71,8 @@ mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # sub
 
 if [ $Proj == "kdvproj" ]; then
     Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/kdvproj"
+elif [ $Proj == "foxp2proj" ]; then
+    Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/foxp2proj"
 else
     Dir_Common="/home/hanwang/Documents/gos_ich/cre_project/Data/data_proc/grin2aproj"
 fi
@@ -74,7 +87,7 @@ if [ ! -d "$Dir_Output" ]; then
     echo "Folder created: $Dir_Output"
 fi
 
-Output_Filename="250602_output_allsubj_tract_metrics_sift$(echo $Sift).txt"
+Output_Filename="250701_output_grin2a_sub-123_tract_metrics_sift$(echo $Sift)_DEMO.txt"
 
 if [ -f "$Dir_Output/$Output_Filename" ]; then
     echo -e "\n\n"
@@ -122,32 +135,32 @@ for Subj in "${Subjs[@]}"; do
     #### Generate CC tracks:
 
     echo "Generating the corpus callosum (CC) tracks for $Subj"
-    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_cc.mif -seed_direction 1,0,0 -nthreads 8 -maxlength 250 -cutoff 0.06 -select 2500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_cc.tck -force
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_cc.mif -seed_direction 1,0,0 -nthreads 8 -maxlength 250 -cutoff 0.06 -select 2500 $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_cc.tck -force
     echo -e "\n"
 
     #### Generate left arcuate fasciculus (AF) tracks:
 
     echo "Generating the left arcuate fasciculus (AF) tracks for $Subj"
-    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
-    #tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl4_hw.mif -exclude sub-114_roi_leftaf_excl3.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
-    #tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    #tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl4_hw.mif -exclude sub-114_roi_leftaf_excl3.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
+    #tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_leftaf_seed.mif -include $(echo $Subj)_roi_leftaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftaf.tck -force
     echo -e "\n"
 
     #### Generate right arcuate fasciculus (AF) tracks:
 
     echo "Generating the right arcuate fasciculus (AF) tracks for $Subj"
-    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_rightaf_seed.mif -include $(echo $Subj)_roi_rightaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_rightaf.tck -force
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_rightaf_seed.mif -include $(echo $Subj)_roi_rightaf_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_rightaf.tck -force
     echo -e "\n"
 
     #### Generate left fornix tracks:
 
     echo "Generating the left fornix tracks for $Subj"
-    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_fornix_seed.mif -include $(echo $Subj)_roi_leftfornix_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftfornix.tck -force
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_fornix_seed.mif -include $(echo $Subj)_roi_leftfornix_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_leftfornix.tck -force
     echo -e "\n"
 
     #### Generate right fornix tracks:
     echo "Generating the right fornix tracks for $Subj"
-    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_fornix_seed.mif -include $(echo $Subj)_roi_rightfornix_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_rightfornix.tck -force
+    tckgen -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -seed_image $(echo $Subj)_roi_fornix_seed.mif -include $(echo $Subj)_roi_rightfornix_incl.mif -exclude $(echo $Subj)_roi_cc.mif -nthreads 8 -maxlength 250 -cutoff 0.06 -select 500 $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_tracks_rightfornix.tck -force
     echo -e "\n"
 
 
@@ -159,7 +172,7 @@ for Subj in "${Subjs[@]}"; do
 
             echo "Performing SIFT2 for $ROI tracks for $Subj"
 
-            tcksift2 -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -out_mu $(echo $Subj)_sift_$(echo $ROI)_mu.txt -out_coeffs $(echo $Subj)_sift_$(echo $ROI)_coeffs.txt -nthreads 8 $(echo $Subj)_tracks_$(echo $ROI).tck $(echo $Subj)_fod_norm$(echo $FodNorm).mif $(echo $Subj)_sift_$(echo $ROI).txt -force
+            tcksift2 -act $(echo $Subj)_5tt_coreg_$(echo $ImgCoreg).mif -out_mu $(echo $Subj)_sift_$(echo $ROI)_mu.txt -out_coeffs $(echo $Subj)_sift_$(echo $ROI)_coeffs.txt -nthreads 8 $(echo $Subj)_tracks_$(echo $ROI).tck $(echo $Subj)_$(echo $FodString)_norm$(echo $FodNorm).mif $(echo $Subj)_sift_$(echo $ROI).txt -force
             tckedit $(echo $Subj)_tracks_$(echo $ROI).tck -tck_weights_in $(echo $Subj)_sift_$(echo $ROI).txt $(echo $Subj)_tracks_$(echo $ROI)_sift$(echo $Sift).tck -force
 
         else

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 ## Author: Han Wang
-### 25 July 2025: Added support for GOSH preterm project.
+### 06 Aug 2025: Added support for GOSH fullterm controls (multi-shell)
+### 25 July 2025: Added support for GOSH preterm participants (multi-shell).
 ### 22 July 2025: Added support for FOXP2 project.
 ### 04 Jun 2025: Added support for various file naming rules for the raw DWI files.
 ### 18 Feb 2025: Added DCM conversion for DWI data.
@@ -23,14 +24,14 @@ DWI2Nifti="1"
 ### The directory structure for KdV and GRIN2A projects are different, GRIN2A has seperate anat and dwi folders under the raw folder.
 
 Proj="pretermproj" # unused for now
-ProjVariant="1" # Variant 1 works for the GOSH preterm multi-shell patients, Variant 2 works for GOSH multi-shell controls.
+GOSHPorjVariant="2" # Variant 1 works for the GOSH preterm multi-shell patients, Variant 2 works for GOSH multi-shell controls.
 DWIFileNameVar="1" # Naming structure for the raw DWI A-P, P-A, and data folders. Variant 1 works for most files for the GRIN2A project. Variant 2 works for g-008 and g-010.
 
 ## Participants:
 
 ### KdV project list: Subjs=("113" "115" "116" "117" "126" "127" "128" "k304" "k308" "k309" "k345" "k347" "k373" "k374")
 ### Subjs=("12225111" "12225211" "12225311" "MEL.04_1" "MEL.04_2" "MEL.04_3") # Put your subject ID here, and ensure the folders are in the format of "sub-ID", such as "sub-113"
-Subjs=("PDM047")
+Subjs=("27" "28" "29" "30" "31" "32" "34" "35" "37" "38") # GOSH preterm multi-shell patient
 mapfile -t Subjs < <(for Subj in "${Subjs[@]}"; do echo "sub-$Subj"; done) # substute the subject IDs with subj-SUBJ_ID
 
 ## Directories:
@@ -52,6 +53,8 @@ Dir_PreProc="$Dir_Common/pre_processing"
 # Conversion:
 
 for Subj in "${Subjs[@]}"; do
+
+    ### Define the directories for the current subject:
 
     if [ $Proj == "kdvproj" ] || [ $Proj == "grin2aproj" ] || [ $Proj == "foxp2proj" ]; then
 
@@ -94,12 +97,31 @@ for Subj in "${Subjs[@]}"; do
             Dir_Subj_Tmp_DWI_DAT_Raw="$Dir_Raw/$Subj/DWI/$DWI_DAT_Dir_Name_Tmp"
         fi
 
-    else
+    else # for now this is only for the preterm project
 
-        DWI_AP_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type f -name "*ADC*.mif" | head -n 1)
-        DWI_PA_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type f -name "*NEGPE*.mif" | head -n 1)
-        DWI_DAT_Dir_Name_Tmp=$(find "$Dir_Raw/$Subj" -type f -name "*MULTISHELL_20CH*.mif" ! -name "*ADC*" ! -name "*NEGPE*" | head -n 1)
+        if [ $GOSHPorjVariant == "1" ]; then # for GOSH preterm multi-shell patients, all measures are in a single nii of mif file.
 
+            Dir_Subj_Tmp_T1_Raw=$(find "$Dir_Raw/$Subj" -type f -name "*t1_mprage*.nii.gz" ! -name "*defaced*" | head -n 1)
+
+            Dir_Subj_Tmp_DWI_AP_Raw=$(find "$Dir_Raw/$Subj" -type f -name "*ADC*.mif" | head -n 1)
+            Dir_Subj_Tmp_DWI_PA_Raw=$(find "$Dir_Raw/$Subj" -type f -name "*NEGPE*.mif" | head -n 1)
+            Dir_Subj_Tmp_DWI_DAT_Raw=$(find "$Dir_Raw/$Subj" -type f -name "*MULTISHELL_20CH*.mif" ! -name "*ADC*" ! -name "*NEGPE*" | head -n 1)
+            
+        else # for GOSH fullterm controls, there's distinction for defaced T1.
+            Dir_Subj_Tmp_T1_Raw=$(find "$Dir_Raw/$Subj" -type f -name "*T1_MPRAGE*.nii.gz" | head -n 1)
+
+            Dir_Subj_Tmp_DWI_PA_Raw=$(find "$Dir_Raw/$Subj" -type f -name "*NEGPE*.nii.gz" | head -n 1)
+            Dir_Subj_Tmp_DWI_DAT_Raw=$(find "$Dir_Raw/$Subj" -type f -name "*MULTISHELL*.nii.gz" ! -name "*SBREF*" | head -n 1)
+
+            #### the AP file is not always available, so we need to create from DWI file.
+
+            echo "Creating AP file from DWI data for $Subj as the AP file is not available..."
+
+            fslroi $Dir_Subj_Tmp_DWI_DAT_Raw "$Dir_Raw/$Subj/$(echo $Subj)_b0.nii.gz" 0 1
+            Dir_Subj_Tmp_DWI_AP_Raw="$Dir_Raw/$Subj/$(echo $Subj)_b0.nii.gz"
+                    
+        fi
+            
     fi
     
     Dir_Subj_Tmp_T1_Proc="$Dir_PreProc/$Subj/anat"
@@ -115,26 +137,19 @@ for Subj in "${Subjs[@]}"; do
             echo "Folder created: $Dir_Subj_Tmp_T1_Proc"
         fi
 
-        if [ $Proj == "pretermproj" ]; then
-        
-            echo "Copying T1 file for $Subj to $Dir_Subj_Tmp_T1_Proc"
-            
-            mrconvert $(find "$Dir_Raw/$Subj" -type f -name "*t1_mprage*.nii.gz" ! -name "*defaced*" | head -n 1) "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
-            mrconvert $(find "$Dir_Raw/$Subj" -type f -name "*t1_mprage*.nii.gz" ! -name "*defaced*" | head -n 1) "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
-        
+
+        echo "Conversion from T1 dicom to nifti and mif started for $Subj"
+        echo -e "\n"
+
+        if find "$Dir_Subj_Tmp_T1_Raw" -type f -name "*.dcm" | grep -q . || [ "$Proj" == "pretermproj" ]; then        
+            mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
+            mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
         else
-            echo "Conversion from T1 dicom to nifti and mif started for $Subj"
-            echo -e "\n"
+            mrconvert "$(find $Dir_Subj_Tmp_T1_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
+            mrconvert "$(find $Dir_Subj_Tmp_T1_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
 
-            if find $Dir_Subj_Tmp_T1_Raw -type f -name "*.dcm" | grep -q .; then        
-                mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
-                mrconvert $Dir_Subj_Tmp_T1_Raw "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
-            else
-                mrconvert "$(find $Dir_Subj_Tmp_T1_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.nii"
-                mrconvert "$(find $Dir_Subj_Tmp_T1_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_T1_Proc/$(echo $Subj)_T1w.mif"
-            fi
 
-            echo "Conversion from T1 dicom to nifti and mif finished for $Subj"
+        echo "Conversion from T1 dicom to nifti and mif finished for $Subj"
         fi
 
         echo -e "\n"
@@ -148,20 +163,26 @@ for Subj in "${Subjs[@]}"; do
             echo "Folder created: $Dir_Subj_Tmp_DWI"
         fi
 
+        echo "Conversion from DWI dicom to nifti and mif started for $Subj"
+        echo -e "\n"
+
 
         if [ $Proj == "pretermproj" ]; then
 
-            echo "Copying DWI files for $Subj to $Dir_Subj_Tmp_DWI"
-            echo -e "\n"
+            if [ $GOSHPorjVariant == "1" ]; then # GOSH preterm patients
 
-            mrconvert $DWI_AP_Dir_Name_Tmp "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0.nii.gz" # convert the AP file to nii.gz
-            mrconvert $DWI_PA_Dir_Name_Tmp "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0_flip.nii.gz" # convert the PA file to nii.gz
-            cp $DWI_DAT_Dir_Name_Tmp "$Dir_Subj_Tmp_DWI/$(echo $Subj)_dwi.mif" # convert the DWI data file to mif
+                mrconvert $Dir_Subj_Tmp_DWI_AP_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0.nii.gz" # convert the AP file to nii.gz
+                mrconvert $Dir_Subj_Tmp_DWI_PA_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0_flip.nii.gz" # convert the PA file to nii.gz
+                cp $Dir_Subj_Tmp_DWI_DAT_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_dwi.mif" # convert the DWI data file to mif
+
+            else # GOSH fullterm controls
+                cp $Dir_Subj_Tmp_DWI_AP_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0.nii.gz" # copy the AP file to the pre-proc folder
+                cp $Dir_Subj_Tmp_DWI_PA_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0_flip.nii.gz" # copy the PA file to the pre-proc folder
+                mrconvert $Dir_Subj_Tmp_DWI_DAT_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_dwi.mif" -fslgrad "$(find $Dir_Raw/$Subj -type f -name "*.bvec" | head -n 1)" "$(find $Dir_Raw/$Subj -type f -name "*.bval" | head -n 1)" # convert the DWI data file to mif
+
+            fi
 
         else
-
-            echo "Conversion from DWI dicom to nifti and mif started for $Subj"
-            echo -e "\n"
 
             if find $Dir_Subj_Tmp_DWI_DAT_Raw -type f -name "*.dcm" | grep -q .; then
                 mrconvert $Dir_Subj_Tmp_DWI_AP_Raw "$Dir_Subj_Tmp_DWI/$(echo $Subj)_b0.nii.gz" -stride 1,2,3 # convert the AP file to nii.gz
@@ -173,8 +194,8 @@ for Subj in "${Subjs[@]}"; do
                 mrconvert "$(find $Dir_Subj_Tmp_DWI_DAT_Raw/nifti_series -type f -name "*.nii" | head -n 1)" "$Dir_Subj_Tmp_DWI/$(echo $Subj)_dwi.mif" -fslgrad "$(find $Dir_Subj_Tmp_DWI_DAT_Raw/nifti_series -type f -name "*.bvec" | head -n 1)" "$(find $Dir_Subj_Tmp_DWI_DAT_Raw/nifti_series -type f -name "*.bval" | head -n 1)" # convert the DWI data file to mif
             fi
         
-            echo "Conversion from DWI dicom to nifti and mif FINISHED for $Subj"
         fi
+        echo "Conversion from DWI dicom to nifti and mif FINISHED for $Subj"
         echo -e "\n\n"
     fi
 
